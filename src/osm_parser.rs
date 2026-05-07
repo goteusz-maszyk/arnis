@@ -159,13 +159,13 @@ impl ProcessedElement {
         }
     }
 
-    pub fn nodes<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ProcessedNode> + 'a> {
-        match self {
-            ProcessedElement::Node(node) => Box::new([node].into_iter()),
-            ProcessedElement::Way(way) => Box::new(way.nodes.iter()),
-            ProcessedElement::Relation(_) => Box::new([].into_iter()),
-        }
-    }
+    // pub fn nodes<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ProcessedNode> + 'a> {
+    //     match self {
+    //         ProcessedElement::Node(node) => Box::new([node].into_iter()),
+    //         ProcessedElement::Way(way) => Box::new(way.nodes.iter()),
+    //         ProcessedElement::Relation(_) => Box::new([].into_iter()),
+    //     }
+    // }
 }
 
 pub fn parse_osm_data(

@@ -8,6 +8,7 @@ use crate::floodfill_cache::{BuildingFootprintBitmap, FloodFillCache};
 use crate::osm_parser::{ProcessedMemberRole, ProcessedRelation, ProcessedWay};
 use crate::world_editor::WorldEditor;
 use rand::Rng;
+use crate::element_processing::placed_feature::PlacedFeature;
 
 pub fn generate_leisure(
     editor: &mut WorldEditor,
@@ -203,4 +204,8 @@ pub fn generate_leisure_from_relation(
             }
         }
     }
+}
+
+pub(crate) fn placed_feature(p0: ProcessedWay, p1: &String) -> PlacedFeature {
+    todo!()
 }

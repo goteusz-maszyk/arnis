@@ -5,7 +5,7 @@ use crate::coordinate_system::cartesian::XZPoint;
 use crate::deterministic_rng::element_rng;
 use crate::element_processing::get_nearest_road_block;
 use crate::floodfill_cache::{FloodFillCache, RoadMaskBitmap};
-use crate::osm_parser::ProcessedElement;
+use crate::osm_parser::{ProcessedElement, ProcessedNode, ProcessedWay};
 use crate::world_editor::WorldEditor;
 use fastnbt::Value;
 use rand::{
@@ -13,6 +13,7 @@ use rand::{
     Rng,
 };
 use std::collections::{HashMap, HashSet};
+use crate::element_processing::placed_feature::PlacedFeature;
 
 pub fn generate_amenities(
     editor: &mut WorldEditor,
@@ -948,4 +949,12 @@ fn make_basic_item(id: &str, slot: i8, count: i8) -> HashMap<String, Value> {
 
 fn tag_enabled(tags: &HashMap<String, String>, key: &str) -> bool {
     tags.get(key).is_some_and(|value| value == "yes")
+}
+
+pub fn placed_feature_way(p0: ProcessedWay, p1: &String) -> PlacedFeature {
+    todo!()
+}
+
+pub(crate) fn placed_feature_node(p0: ProcessedNode, p1: &String) -> PlacedFeature {
+    todo!()
 }

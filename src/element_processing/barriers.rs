@@ -1,6 +1,7 @@
 use crate::block_definitions::*;
 use crate::bresenham::bresenham_line;
-use crate::osm_parser::{ProcessedElement, ProcessedNode};
+use crate::element_processing::placed_feature::PlacedFeature;
+use crate::osm_parser::{ProcessedElement, ProcessedNode, ProcessedWay};
 use crate::world_editor::WorldEditor;
 
 pub fn generate_barriers(editor: &mut WorldEditor, element: &ProcessedElement) {
@@ -169,4 +170,8 @@ pub fn generate_barrier_nodes(editor: &mut WorldEditor<'_>, node: &ProcessedNode
         None => {}
         _ => {}
     }
+}
+
+pub(crate) fn placed_feature(p0: ProcessedWay, p1: &String) -> PlacedFeature {
+    todo!()
 }

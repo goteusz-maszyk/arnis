@@ -61,7 +61,7 @@ pub struct Block {
 }
 
 // Extended block with dynamic properties
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlockWithProperties {
     pub block: Block,
     pub properties: Option<Value>,

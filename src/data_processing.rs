@@ -1,6 +1,7 @@
 use crate::args::Args;
 use crate::coordinate_system::cartesian::XZBBox;
 use crate::coordinate_system::geographic::LLBBox;
+use crate::element_processing::placed_feature::PlacedFeature;
 use crate::element_processing::*;
 use crate::floodfill_cache::FloodFillCache;
 use crate::ground::Ground;
@@ -13,7 +14,8 @@ use crate::telemetry::{send_log, LogLevel};
 use crate::world_editor::{WorldEditor, WorldFormat};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::collections::HashSet;
+use itertools::Itertools;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -125,7 +127,8 @@ pub fn generate_world_with_options(
         outlines
     };
 
-    // Process all elements
+    let mut layered_elements: HashMap<i32, Vec<PlacedFeature>> = HashMap::new();
+
     for element in elements.into_iter() {
         element_counter += 1;
         if element_counter.is_multiple_of(pb_batch_size) {
@@ -152,195 +155,28 @@ pub fn generate_world_with_options(
             process_pb.set_message("");
         }
 
-        match &element {
-            ProcessedElement::Way(way) => {
-                if way.tags.contains_key("building") || way.tags.contains_key("building:part") {
-                    // Skip building outlines that are suppressed by building relations with parts.
-                    // The individual building:part ways will render instead.
-                    if !suppressed_building_outlines.contains(&way.id) {
-                        buildings::generate_buildings(
-                            &mut editor,
-                            way,
-                            args,
-                            None,
-                            None,
-                            &flood_fill_cache,
-                            &building_passages,
-                        );
-                    }
-                } else if way.tags.contains_key("highway") {
-                    highways::generate_highways(
-                        &mut editor,
-                        &element,
-                        args,
-                        &highway_connectivity,
-                        &flood_fill_cache,
-                        &road_mask,
-                    );
-                } else if way.tags.contains_key("landuse") {
-                    landuse::generate_landuse(
-                        &mut editor,
-                        way,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if way.tags.contains_key("natural") {
-                    natural::generate_natural(
-                        &mut editor,
-                        &element,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if way.tags.contains_key("amenity") {
-                    amenities::generate_amenities(
-                        &mut editor,
-                        &element,
-                        args,
-                        &flood_fill_cache,
-                        &road_mask,
-                    );
-                } else if way.tags.contains_key("leisure") {
-                    leisure::generate_leisure(
-                        &mut editor,
-                        way,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if way.tags.contains_key("barrier") {
-                    barriers::generate_barriers(&mut editor, &element);
-                } else if let Some(val) = way.tags.get("waterway") {
-                    if val == "dock" {
-                        // docks count as water areas
-                        water_areas::generate_water_area_from_way(&mut editor, way, &xzbbox);
-                    } else {
-                        waterways::generate_waterways(&mut editor, way);
-                    }
-                } else if way.tags.contains_key("bridge") {
-                    //bridges::generate_bridges(&mut editor, way, ground_level); // TODO FIX
-                } else if way.tags.contains_key("railway") {
-                    railways::generate_railways(&mut editor, way, &mut subway_points);
-                } else if way.tags.contains_key("roller_coaster") {
-                    railways::generate_roller_coaster(&mut editor, way);
-                } else if way.tags.contains_key("aeroway") || way.tags.contains_key("area:aeroway")
-                {
-                    highways::generate_aeroway(&mut editor, way, args);
-                } else if way.tags.get("service") == Some(&"siding".to_string()) {
-                    highways::generate_siding(&mut editor, way);
-                } else if way.tags.get("tomb") == Some(&"pyramid".to_string()) {
-                    historic::generate_pyramid(&mut editor, way, args, &flood_fill_cache);
-                } else if way.tags.contains_key("man_made") {
-                    man_made::generate_man_made(&mut editor, &element, args);
-                } else if way.tags.contains_key("power") {
-                    power::generate_power(&mut editor, &element);
-                } else if way.tags.contains_key("place") {
-                    landuse::generate_place(&mut editor, way, args, &flood_fill_cache);
-                }
-                // Release flood fill cache entry for this way
-                flood_fill_cache.remove_way(way.id);
-            }
-            ProcessedElement::Node(node) => {
-                if node.tags.contains_key("door") || node.tags.contains_key("entrance") {
-                    doors::generate_doors(&mut editor, node);
-                } else if node.tags.contains_key("natural")
-                    && node.tags.get("natural") == Some(&"tree".to_string())
-                {
-                    natural::generate_natural(
-                        &mut editor,
-                        &element,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if node.tags.contains_key("amenity") {
-                    amenities::generate_amenities(
-                        &mut editor,
-                        &element,
-                        args,
-                        &flood_fill_cache,
-                        &road_mask,
-                    );
-                } else if node.tags.contains_key("barrier") {
-                    barriers::generate_barrier_nodes(&mut editor, node);
-                } else if node.tags.contains_key("highway") {
-                    highways::generate_highways(
-                        &mut editor,
-                        &element,
-                        args,
-                        &highway_connectivity,
-                        &flood_fill_cache,
-                        &road_mask,
-                    );
-                } else if node.tags.contains_key("tourism") {
-                    tourisms::generate_tourisms(&mut editor, node);
-                } else if node.tags.contains_key("man_made") {
-                    man_made::generate_man_made_nodes(&mut editor, node);
-                } else if node.tags.contains_key("power") {
-                    power::generate_power_nodes(&mut editor, node);
-                } else if node.tags.contains_key("historic") {
-                    historic::generate_historic(&mut editor, node);
-                } else if node.tags.contains_key("emergency") {
-                    emergency::generate_emergency(&mut editor, node);
-                } else if node.tags.contains_key("advertising") {
-                    advertising::generate_advertising(&mut editor, node);
-                }
-            }
-            ProcessedElement::Relation(rel) => {
-                let is_building_relation = rel.tags.contains_key("building")
-                    || rel.tags.contains_key("building:part")
-                    || rel.tags.get("type").map(|t| t.as_str()) == Some("building");
-                if is_building_relation {
-                    buildings::generate_building_from_relation(
-                        &mut editor,
-                        rel,
-                        args,
-                        &flood_fill_cache,
-                        &xzbbox,
-                        &building_passages,
-                    );
-                } else if rel.tags.contains_key("water")
-                    || rel
-                        .tags
-                        .get("natural")
-                        .map(|val| val == "water" || val == "bay")
-                        .unwrap_or(false)
-                {
-                    water_areas::generate_water_areas_from_relation(&mut editor, rel, &xzbbox);
-                } else if rel.tags.contains_key("natural") {
-                    natural::generate_natural_from_relation(
-                        &mut editor,
-                        rel,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if rel.tags.contains_key("landuse") {
-                    landuse::generate_landuse_from_relation(
-                        &mut editor,
-                        rel,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if rel.tags.get("leisure") == Some(&"park".to_string()) {
-                    leisure::generate_leisure_from_relation(
-                        &mut editor,
-                        rel,
-                        args,
-                        &flood_fill_cache,
-                        &building_footprints,
-                    );
-                } else if rel.tags.contains_key("man_made") {
-                    man_made::generate_man_made(&mut editor, &element, args);
-                }
-                // Release flood fill cache entries for all ways in this relation
-                let way_ids: Vec<u64> = rel.members.iter().map(|m| m.way.id).collect();
-                flood_fill_cache.remove_relation_ways(&way_ids);
+        let Some((layer, feature)) =
+            PlacedFeature::create_or_place(element, &suppressed_building_outlines)
+        else {
+            continue;
+        };
+        layered_elements.entry(layer).or_default().push(feature);
+    }
+    let keys = layered_elements
+        .keys()
+        .cloned()
+        .sorted_by_key(|elem| elem.abs());
+    for layer in keys {
+        for feature in layered_elements
+            .remove(&layer)
+            .unwrap()
+            .into_iter()
+            .sorted_by_key(|f| *f as i32)
+        {
+            match feature {
+                _ => {}
             }
         }
-        // Element is dropped here, freeing its memory immediately
     }
 
     process_pb.inc(element_counter % pb_batch_size);

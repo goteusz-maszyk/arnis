@@ -7,6 +7,7 @@ use crate::floodfill_cache::{BuildingFootprintBitmap, FloodFillCache};
 use crate::osm_parser::{ProcessedElement, ProcessedMemberRole, ProcessedRelation, ProcessedWay};
 use crate::world_editor::WorldEditor;
 use rand::{prelude::IndexedRandom, Rng};
+use crate::element_processing::placed_feature::PlacedFeature;
 
 pub fn generate_natural(
     editor: &mut WorldEditor,
@@ -656,4 +657,12 @@ fn vary_rock_block(base: Block, x: i32, z: i32) -> Block {
         },
         _ => base,
     }
+}
+
+pub fn placed_feature(way: ProcessedWay, natural: &String) -> PlacedFeature {
+    todo!()
+}
+
+pub(crate) fn placed_feature_relation(rel: ProcessedRelation) -> PlacedFeature {
+    todo!()
 }

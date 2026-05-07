@@ -11,6 +11,7 @@ pub mod landuse;
 pub mod leisure;
 pub mod man_made;
 pub mod natural;
+pub mod placed_feature;
 pub mod power;
 pub mod railways;
 pub mod subprocessor;

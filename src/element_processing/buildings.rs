@@ -6,6 +6,7 @@ use crate::colors::color_text_to_rgb_tuple;
 use crate::coordinate_system::cartesian::XZPoint;
 use crate::deterministic_rng::{coord_rng, element_rng};
 use crate::element_processing::historic;
+use crate::element_processing::placed_feature::PlacedFeature;
 use crate::element_processing::subprocessor::buildings_interior::generate_building_interior;
 use crate::floodfill_cache::{CoordinateBitmap, FloodFillCache};
 use crate::osm_parser::{ProcessedMemberRole, ProcessedNode, ProcessedRelation, ProcessedWay};
@@ -5766,4 +5767,12 @@ fn generate_bridge(
     for &(x, z) in bridge_area.iter() {
         editor.set_block_absolute(floor_block, x, floor_y, z, None, None);
     }
+}
+
+pub fn placed_feature(way: ProcessedWay) -> PlacedFeature {
+    PlacedFeature::WayIdk { way }
+}
+
+pub(crate) fn placed_feature_relation(p0: ProcessedRelation) -> PlacedFeature {
+    todo!()
 }

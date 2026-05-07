@@ -8,7 +8,12 @@ use crate::osm_parser::{ProcessedMemberRole, ProcessedRelation, ProcessedWay};
 use crate::world_editor::WorldEditor;
 use rand::prelude::IndexedRandom;
 use rand::Rng;
+use crate::element_processing::placed_feature::PlacedFeature;
 
+#[derive(Debug, PartialEq)]
+pub enum LanduseType {
+
+}
 pub fn generate_landuse(
     editor: &mut WorldEditor,
     element: &ProcessedWay,
@@ -16,43 +21,6 @@ pub fn generate_landuse(
     flood_fill_cache: &FloodFillCache,
     building_footprints: &BuildingFootprintBitmap,
 ) {
-    // Determine block type based on landuse tag
-    let binding: String = "".to_string();
-    let landuse_tag: &String = element.tags.get("landuse").unwrap_or(&binding);
-
-    // Use deterministic RNG seeded by element ID for consistent results across region boundaries
-    let mut rng = element_rng(element.id);
-
-    let block_type = match landuse_tag.as_str() {
-        "greenfield" | "meadow" | "grass" | "orchard" | "forest" => GRASS_BLOCK,
-        "farmland" => FARMLAND,
-        "cemetery" => PODZOL,
-        "construction" => COARSE_DIRT,
-        "traffic_island" => STONE_BLOCK_SLAB,
-        // residential and commercial are too broad, they cover entire zones including
-        // gardens, parks, and green spaces. ESA WorldCover handles built-up classification
-        // at 10m satellite resolution, which is far more precise.
-        "residential" | "commercial" => return,
-        "education" => POLISHED_ANDESITE,
-        "religious" => POLISHED_ANDESITE,
-        "industrial" => STONE,       // Randomized per-block below
-        "military" => GRAY_CONCRETE, // Randomized per-block below
-        "railway" => GRAVEL,
-        "vineyard" => COARSE_DIRT,
-        "brownfield" => COARSE_DIRT,
-        "landfill" => {
-            // Gravel if man_made = spoil_heap or heap, coarse dirt else
-            let manmade_tag = element.tags.get("man_made").unwrap_or(&binding);
-            if manmade_tag == "spoil_heap" || manmade_tag == "heap" {
-                GRAVEL
-            } else {
-                COARSE_DIRT
-            }
-        }
-        "quarry" => STONE, // Randomized per-block below
-        _ => GRASS_BLOCK,
-    };
-
     // Get the area of the landuse element using cache
     let floor_area = flood_fill_cache.get_or_compute(element, args.timeout.as_ref());
 
@@ -80,69 +48,6 @@ pub fn generate_landuse(
     };
 
     for &(x, z) in floor_area.iter() {
-        // Apply per-block randomness for certain landuse types
-        let actual_block = if landuse_tag == "industrial" {
-            // Industrial: primarily stone, with some stone bricks and smooth stone
-            let random_value = rng.random_range(0..100);
-            if random_value < 70 {
-                STONE
-            } else if random_value < 90 {
-                STONE_BRICKS
-            } else {
-                SMOOTH_STONE
-            }
-        } else if landuse_tag == "military" {
-            // Military: primarily gray concrete, with some stone bricks and cobblestone
-            let random_value = rng.random_range(0..100);
-            if random_value < 89 {
-                GRAY_CONCRETE
-            } else if random_value < 99 {
-                STONE_BRICKS
-            } else {
-                COBBLESTONE
-            }
-        } else if landuse_tag == "quarry" {
-            // Quarry: mix of stone, gravel, cobblestone, andesite
-            let random_value = rng.random_range(0..100);
-            if random_value < 40 {
-                STONE
-            } else if random_value < 60 {
-                GRAVEL
-            } else if random_value < 80 {
-                COBBLESTONE
-            } else {
-                ANDESITE
-            }
-        } else {
-            block_type
-        };
-
-        // Don't overwrite roads or water with landuse ground blocks
-        let is_protected = editor.check_for_block(
-            x,
-            0,
-            z,
-            Some(&[
-                BLACK_CONCRETE,
-                GRAY_CONCRETE_POWDER,
-                CYAN_TERRACOTTA,
-                GRAY_CONCRETE,
-                LIGHT_GRAY_CONCRETE,
-                WHITE_CONCRETE,
-                DIRT_PATH,
-                SMOOTH_STONE,
-                WATER,
-            ]),
-        );
-
-        if landuse_tag == "traffic_island" {
-            editor.set_block(actual_block, x, 1, z, None, None);
-        } else if landuse_tag == "construction" || landuse_tag == "railway" {
-            editor.set_block(actual_block, x, 0, z, None, Some(&[SPONGE]));
-        } else if !is_protected {
-            editor.set_block(actual_block, x, 0, z, None, None);
-        }
-
         // Add specific features for different landuse types
         match landuse_tag.as_str() {
             "cemetery" if (x % 3 == 0) && (z % 3 == 0) => {
@@ -379,26 +284,6 @@ pub fn generate_landuse(
             _ => {}
         }
     }
-
-    // Generate a stone brick wall fence around cemeteries
-    if landuse_tag == "cemetery" {
-        generate_cemetery_fence(editor, element);
-    }
-}
-
-/// Draws a stone-brick wall fence (with slab cap) along the outline of a
-/// cemetery way.
-fn generate_cemetery_fence(editor: &mut WorldEditor, element: &ProcessedWay) {
-    for i in 1..element.nodes.len() {
-        let prev = &element.nodes[i - 1];
-        let cur = &element.nodes[i];
-
-        let points = bresenham_line(prev.x, 0, prev.z, cur.x, 0, cur.z);
-        for (bx, _, bz) in points {
-            editor.set_block(STONE_BRICK_WALL, bx, 1, bz, None, None);
-            editor.set_block(STONE_BRICK_SLAB, bx, 2, bz, None, None);
-        }
-    }
 }
 
 pub fn generate_landuse_from_relation(
@@ -458,5 +343,68 @@ pub fn generate_place(
     // Place ground blocks
     for &(x, z) in floor_area.iter() {
         editor.set_block(block_type, x, 0, z, None, None);
+    }
+}
+
+pub fn create_or_place_feature(way: ProcessedWay, landuse: &String, flood_fill_cache: &FloodFillCache, args: &Args, editor: &mut WorldEditor) {
+    let mut rng = element_rng(way.id);
+    let floor_area = flood_fill_cache.get_or_compute(&way, args.timeout.as_ref());
+    for &(x, z) in floor_area.iter() {
+        let ground_block = match landuse.as_str() {
+            "industrial" => {
+                let random_value = rng.random_range(0..100);
+                if random_value < 70 {
+                    STONE
+                } else if random_value < 90 {
+                    STONE_BRICKS
+                } else {
+                    SMOOTH_STONE
+                }
+            },
+            "military" => {
+                let random_value = rng.random_range(0..100);
+                if random_value < 89 {
+                    GRAY_CONCRETE
+                } else if random_value < 99 {
+                    STONE_BRICKS
+                } else {
+                    COBBLESTONE
+                }
+            },
+            "quarry" => {
+                // Quarry: mix of stone, gravel, cobblestone, andesite
+                let random_value = rng.random_range(0..100);
+                if random_value < 40 {
+                    STONE
+                } else if random_value < 60 {
+                    GRAVEL
+                } else if random_value < 80 {
+                    COBBLESTONE
+                } else {
+                    ANDESITE
+                }
+            },
+            "greenfield" | "meadow" | "grass" | "orchard" | "forest" => GRASS_BLOCK,
+            "farmland" => FARMLAND,
+            "cemetery" => PODZOL,
+            "brownfield" | "construction" | "vineyard"=> COARSE_DIRT,
+            "traffic_island" | "education" | "religious" => POLISHED_ANDESITE,
+            "railway" => GRAVEL,
+            "landfill" => {
+                match way.tags.get("man_made").unwrap_or(&"".to_string()).as_str() {
+                    "spoil_heap" | "heap" => GRAVEL,
+                    &_ => COARSE_DIRT
+                }
+            }
+            _ => return
+        };
+
+        if landuse == "traffic_island" {
+            editor.set_block(ground_block, x, 1, z, None, None);
+        } else {
+            editor.set_block(ground_block, x, 0, z, None, None);
+        }
+
+
     }
 }
